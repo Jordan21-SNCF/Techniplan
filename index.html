@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TechniPlan — Plans électricité &amp; plomberie</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 :root{
   --bg:#10131a; --bg2:#0c0f15; --panel:#171c26; --panel2:#1d2433;
@@ -235,6 +236,52 @@ table.ctable{border-collapse:collapse;width:100%;min-width:540px;font-size:12px;
   .tool{min-width:50px}
 }
 
+/* ---------- Alerte expiration ---------- */
+#alertBanner{background:rgba(255,179,64,.1);border-bottom:2px solid var(--av);padding:7px 16px;display:none;align-items:center;gap:10px;font-size:12.5px;z-index:28;flex-wrap:wrap}
+#alertBanner.show{display:flex}
+#alertBanner strong{color:var(--av);white-space:nowrap}
+#alertBanner .al-items{flex:1;color:var(--muted)}
+#alertBanner .al-close{color:var(--muted);font-size:16px;cursor:pointer;margin-left:auto;flex:0 0 auto}
+.node-expired .halo{opacity:.7 !important;stroke:var(--av) !important;animation:expPulse 2s infinite}
+@keyframes expPulse{0%,100%{opacity:.3}50%{opacity:.9}}
+
+/* ---------- Templates ---------- */
+.tpl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-top:12px}
+.tpl-card{border:1.5px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;transition:.15s;background:var(--bg2)}
+.tpl-card:hover{border-color:var(--accent);background:var(--panel2)}
+.tpl-card h4{font-size:13px;margin-bottom:4px;display:flex;align-items:center;gap:7px}
+.tpl-card .tpl-desc{font-size:11.5px;color:var(--muted);margin:0 0 6px}
+.tpl-card .tpl-circs{font-size:10.5px;color:var(--muted);font-family:var(--mono);line-height:1.6}
+
+/* ---------- Comparaison ---------- */
+#compareOverlay{position:absolute;top:12px;left:12px;background:var(--panel2);border:1px solid var(--line2);border-radius:10px;padding:12px 16px;z-index:45;display:none;min-width:220px;font-size:12.5px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+#compareOverlay.show{display:block}
+#compareOverlay h4{margin-bottom:10px;font-size:13.5px;display:flex;align-items:center;justify-content:space-between}
+.diff-legend .dl{display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:12px}
+.diff-legend .dl span{width:12px;height:12px;border-radius:3px;flex:0 0 auto}
+.node-added{filter:drop-shadow(0 0 7px #3fd68f)}
+.node-modified{filter:drop-shadow(0 0 7px #ffb340)}
+.node-removed{opacity:.35}
+
+/* ---------- Paramètres / types perso ---------- */
+.type-row{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--line)}
+.type-row .tr-icon{width:28px;height:28px;border-radius:7px;display:grid;place-items:center;font-size:15px}
+.type-row .tr-name{flex:1;font-size:13px}
+.type-row .tr-color{width:30px;height:30px;border-radius:6px;border:1px solid var(--line);overflow:hidden;cursor:pointer}
+.type-row .tr-color input[type=color]{width:100%;height:100%;border:none;cursor:pointer;padding:0;background:none}
+.type-row .tr-del{color:var(--muted);font-size:14px;padding:0 3px}
+.type-row .tr-del:hover{color:var(--nc)}
+
+/* ---------- Signatures ---------- */
+#sigModal canvas{border:2px solid var(--line2);border-radius:8px;cursor:crosshair;touch-action:none;background:#fff;display:block;margin:0 auto}
+.sig-preview{display:flex;align-items:center;gap:10px;padding:8px;background:var(--bg2);border:1px solid var(--line);border-radius:8px;margin-top:6px}
+.sig-preview img{height:44px;background:#fff;border-radius:4px;border:1px solid var(--line)}
+.sig-preview .sig-meta{font-size:11.5px;color:var(--muted);font-family:var(--mono)}
+
+/* ---------- QR code ---------- */
+#qrModal .qr-box{display:flex;justify-content:center;padding:14px;background:#fff;border-radius:10px;margin:12px 0}
+#qrModal .qr-url{font-size:11px;color:var(--muted);font-family:var(--mono);word-break:break-all;margin-bottom:4px;text-align:center}
+
 /* ---------- Photos ---------- */
 .photo-grid{display:flex;flex-wrap:wrap;gap:7px;margin-top:7px}
 .photo-item{position:relative;display:inline-flex}
@@ -282,6 +329,9 @@ table.ctable{border-collapse:collapse;width:100%;min-width:540px;font-size:12px;
   </div>
   <div class="stats" id="stats"></div>
   <div class="hbtns">
+    <button class="hbtn" id="btnTemplates" title="Templates d'armoires préconfigurées">📋 Templates</button>
+    <button class="hbtn" id="btnCompare" title="Comparer deux plans">⇄ Comparer</button>
+    <button class="hbtn" id="btnSettings" title="Types d'équipements personnalisés">⚙ Types</button>
     <button class="hbtn" id="btnPrintPlan" title="Imprimer le plan SVG">🗺 Plan</button>
     <button class="hbtn" id="btnReport" title="Rapport de vérification imprimable">🖨 Rapport</button>
     <button class="hbtn" id="btnExport" title="Exporter le projet en JSON">⤓ Export</button>
@@ -291,6 +341,12 @@ table.ctable{border-collapse:collapse;width:100%;min-width:540px;font-size:12px;
   </div>
   <input type="file" id="fileImport" accept=".json" style="display:none">
 </header>
+
+<div id="alertBanner">
+  <strong>⚠️ Vérifications expirées :</strong>
+  <span class="al-items" id="alertItems"></span>
+  <span class="al-close" id="alertClose">✕</span>
+</div>
 
 <div id="toolbar">
   <button class="tool active" data-tool="select"><span class="ic">⬚</span>Sélection</button>
@@ -340,6 +396,11 @@ table.ctable{border-collapse:collapse;width:100%;min-width:540px;font-size:12px;
     </svg>
     <div id="tooltip"></div>
     <div id="hint"></div>
+    <div id="compareOverlay">
+      <h4>⇄ Comparaison <span style="cursor:pointer;color:var(--muted);font-size:14px" id="compareClose">✕</span></h4>
+      <div class="diff-legend" id="diffLegend"></div>
+      <button class="mini-btn danger" id="compareStop" style="margin-top:10px;width:100%">Quitter</button>
+    </div>
     <div id="zoomctl">
       <button id="zin">＋</button>
       <button id="zout">－</button>
@@ -393,6 +454,70 @@ table.ctable{border-collapse:collapse;width:100%;min-width:540px;font-size:12px;
 
 <div id="toast"></div>
 <div id="report"></div>
+
+<!-- Signature numérique -->
+<div class="modal-bg" id="sigModal">
+  <div class="modal" style="max-width:500px">
+    <h2>✍️ Signer la vérification</h2>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:10px">Signez dans le cadre blanc (souris ou tactile)</p>
+    <canvas id="sigCanvas" width="440" height="160"></canvas>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+      <button class="mini-btn" id="sigClear">Effacer</button>
+      <button class="mini-btn" id="sigCancel">Annuler</button>
+      <button class="hbtn primary" id="sigSave">Valider</button>
+    </div>
+  </div>
+</div>
+
+<!-- Templates -->
+<div class="modal-bg" id="templateModal">
+  <div class="modal" style="max-width:720px">
+    <h2>📋 Templates d'armoires</h2>
+    <p style="color:var(--muted);font-size:13px">Cliquez un template pour le placer sur le plan. Les champs sont pré-remplis, vous pourrez les modifier ensuite.</p>
+    <div class="tpl-grid" id="tplGrid"></div>
+    <div style="text-align:right;margin-top:14px"><button class="hbtn" id="tplClose">Fermer</button></div>
+  </div>
+</div>
+
+<!-- Comparaison -->
+<div class="modal-bg" id="compareModal">
+  <div class="modal" style="max-width:460px">
+    <h2>⇄ Comparer deux plans</h2>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:14px">Chargez un second fichier JSON. Les différences par rapport au plan actuel apparaîtront sur le plan (vert = ajouté, orange = modifié, estompé = supprimé).</p>
+    <div class="field"><label>Second plan (fichier JSON)</label>
+      <input type="file" id="compareFile" accept=".json" style="padding:8px">
+    </div>
+    <div style="text-align:right;margin-top:14px"><button class="hbtn" id="compareCancel">Annuler</button></div>
+  </div>
+</div>
+
+<!-- Paramètres types -->
+<div class="modal-bg" id="settingsModal">
+  <div class="modal" style="max-width:540px">
+    <h2>⚙️ Types d'équipements</h2>
+    <div style="display:flex;gap:6px;margin-bottom:12px">
+      <button class="hbtn" id="stgTabElec" style="flex:1">⚡ Électricité</button>
+      <button class="hbtn" id="stgTabPlomb" style="flex:1">💧 Plomberie</button>
+    </div>
+    <div id="stgList"></div>
+    <div style="margin-top:10px"><button class="mini-btn" id="stgAdd">＋ Nouveau type</button></div>
+    <div style="text-align:right;margin-top:14px"><button class="hbtn primary" id="stgClose">Fermer</button></div>
+  </div>
+</div>
+
+<!-- QR Code -->
+<div class="modal-bg" id="qrModal">
+  <div class="modal" style="max-width:340px;text-align:center">
+    <h2>📱 QR Code</h2>
+    <p class="qr-url" id="qrUrl"></p>
+    <div class="qr-box"><div id="qrCanvas"></div></div>
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:6px">
+      <button class="hbtn" id="qrDownload">⤓ PNG</button>
+      <button class="hbtn" id="qrPrint">🖨 Étiquette</button>
+      <button class="hbtn" id="qrClose">Fermer</button>
+    </div>
+  </div>
+</div>
 
 <!-- Visionneuse photo -->
 <div id="lightbox">
@@ -461,7 +586,7 @@ const ui = {
 };
 
 function blankState(){
-  return { version:1, name:'Plan sans titre', walls:[], texts:[], nodes:[], links:[] };
+  return { version:1, name:'Plan sans titre', walls:[], texts:[], nodes:[], links:[], customTypes:{elec:{},plomb:{}} };
 }
 
 /* ----- Projet de démonstration au premier lancement ----- */
@@ -559,7 +684,10 @@ function renderTexts(){
   }
 }
 
-function equipDef(n){ return (TYPES[n.domain]?.equips[n.type]) || {label:n.type,icon:'◉',color:'#9aa5b1'}; }
+function effectiveEquips(domain){
+  return Object.assign({}, TYPES[domain]?.equips, (state?.customTypes||{})[domain]||{});
+}
+function equipDef(n){ return effectiveEquips(n.domain)[n.type] || {label:n.type,icon:'◉',color:'#9aa5b1'}; }
 
 function nodeSVG(n){
   const sel = ui.sel===n.id ? 'sel' : '';
@@ -576,6 +704,7 @@ function nodeSVG(n){
       <text y="20" text-anchor="middle" font-size="10" font-weight="800" fill="${sc}" font-family="var(--mono)">${STATUS[n.status]?.label||'?'}</text>
       ${ncCircuits?`<circle cx="20" cy="-24" r="8" fill="var(--nc)"/><text x="20" y="-20.5" text-anchor="middle" font-size="9.5" font-weight="800" fill="#fff">${ncCircuits}</text>`:''}
       ${(n.photos&&n.photos.length)?`<circle cx="-20" cy="-24" r="7" fill="#4da3ff" stroke="var(--panel2)" stroke-width="1.5"/><text x="-20" y="-20.5" text-anchor="middle" font-size="9" fill="#fff">📷</text>`:''}
+      ${expiredIds&&expiredIds.has(n.id)?`<text x="0" y="34" text-anchor="middle" font-size="9" fill="var(--av)">⚠ expirée</text>`:''}
       </g>
       <text class="node-label" y="${-26*s - 8}">${esc(n.name)}</text>
     </g>`;
@@ -771,7 +900,7 @@ function setTool(t){
 function renderSubbar(){
   const sb = $('#subbar');
   if(ui.tool!=='equip'){ sb.classList.remove('show'); return; }
-  const eq = TYPES[ui.domain].equips;
+  const eq = effectiveEquips(ui.domain);
   sb.innerHTML = Object.entries(eq).map(([k,d])=>
     `<button class="type-chip ${ui.equipType===k?'on':''}" data-type="${k}"><span class="sw" style="background:${d.color}"></span>${d.label}</button>`).join('');
   sb.classList.add('show');
@@ -885,11 +1014,14 @@ svg.addEventListener('pointerdown', e=>{
     let n;
     if(ui.tool==='cabinet'){
       const count = cabinetsOf(ui.domain).length+1;
-      n = {id:uid(),kind:'cabinet',domain:ui.domain,x,y,
-           name:(ui.domain==='elec'?'Armoire ':'Collecteur ')+count,
-           status:'AV',provenance:null,notes:'',dateVerif:'',circuits:[]};
+      if(pendingTemplate){
+        const tpl=pendingTemplate; pendingTemplate=null;
+        n={id:uid(),kind:'cabinet',domain:tpl.domain,x,y,name:tpl.name,status:'AV',provenance:null,notes:'',dateVerif:'',circuits:tpl.circuits.map(c=>({...c}))};
+      } else {
+        n={id:uid(),kind:'cabinet',domain:ui.domain,x,y,name:(ui.domain==='elec'?'Armoire ':'Collecteur ')+count,status:'AV',provenance:null,notes:'',dateVerif:'',circuits:[]};
+      }
     } else if(ui.tool==='equip'){
-      const d = TYPES[ui.domain].equips[ui.equipType];
+      const d = effectiveEquips(ui.domain)[ui.equipType]||Object.values(effectiveEquips(ui.domain))[0];
       n = {id:uid(),kind:'equip',domain:ui.domain,type:ui.equipType,x,y,name:d.label,statut:'',notes:''};
     } else if(ui.tool==='exit'){
       n = {id:uid(),kind:'exit',x,y,name:'Sortie '+(state.nodes.filter(z=>z.kind==='exit').length+1),cabinetId:null,remoteId:null,notes:''};
@@ -1085,7 +1217,7 @@ function renderPanel(){
     const dom = TYPES[n.domain];
     const others = cabinetsOf(n.domain).filter(c=>c.id!==n.id);
     const targets = linksFrom(n.id);
-    title.innerHTML = `${dom.cabIcon} <span class="t">${esc(n.name)}</span> <span class="chip ${n.status}">${STATUS[n.status]?.label}</span>`;
+    title.innerHTML = `${dom.cabIcon} <span class="t">${esc(n.name)}</span> <span class="chip ${n.status}">${STATUS[n.status]?.label}</span> <button class="mini-btn" id="btnSig" style="margin-left:auto">✍️ Signer</button> <button class="mini-btn" id="btnQR">QR</button>`;
     body.innerHTML = `
       <div class="frow">
         <div class="field"><label>Repère / nom</label><input data-bind="name" value="${esc(n.name)}"></div>
@@ -1118,6 +1250,7 @@ function renderPanel(){
         }).join('') : '<p style="color:var(--muted);font-size:12.5px">Aucune liaison. Utilisez l\'outil ⤳ Liaison : cliquez cette armoire puis l\'élément alimenté.</p>'}
       </div>
       ${photoSectionHTML(n)}
+      ${signaturesHTML(n)}
       ${historyHTML(n)}`;
     bindInputs(n);
     bindScaleSlider(n);
@@ -1135,6 +1268,9 @@ function renderPanel(){
       pushHistory(); state.links = state.links.filter(l=>l.id!==b.dataset.unlink); renderPanel(); renderAll(); save();
     });
     bindCircuitTable(n);
+    $('#btnSig').onclick = ()=>openSigModal(n);
+    $('#btnQR').onclick  = ()=>showQR(n);
+    bindSigSection(n);
     return;
   }
 
@@ -1142,7 +1278,7 @@ function renderPanel(){
     const d = equipDef(n);
     const cabs = cabinetsOf(n.domain);
     const src = fedBy(n.id);
-    title.innerHTML = `<span style="color:${d.color}">${d.icon}</span> <span class="t">${esc(n.name||d.label)}</span>`;
+    title.innerHTML = `<span style="color:${d.color}">${d.icon}</span> <span class="t">${esc(n.name||d.label)}</span> <button class="mini-btn" id="btnQR" style="margin-left:auto">QR</button>`;
     body.innerHTML = `
       <div class="frow">
         <div class="field"><label>Nom / repère</label><input data-bind="name" value="${esc(n.name)}"></div>
@@ -1161,6 +1297,7 @@ function renderPanel(){
     bindInputs(n);
     bindScaleSlider(n);
     bindPhotoSection(n);
+    $('#btnQR').onclick = ()=>showQR(n);
     $('#eqSrc').onchange = e=>{
       pushHistory();
       state.links = state.links.filter(l=>l.to!==n.id);
@@ -1218,6 +1355,276 @@ function renderPanel(){
     bindScaleSlider(n);
     return;
   }
+}
+
+/* ================================================================
+   FONCTIONNALITÉS PHASE 1
+   ================================================================ */
+
+/* ===== 1. Alertes d'expiration ===== */
+const EXPIRY_MONTHS = 12;
+let expiredIds = new Set();
+
+function checkExpiration(){
+  const now = new Date();
+  expiredIds = new Set();
+  state.nodes.filter(n=>n.kind==='cabinet').forEach(n=>{
+    if(!n.dateVerif){
+      expiredIds.add(n.id);
+    } else {
+      const d = new Date(n.dateVerif);
+      const months = (now - d) / (1000*60*60*24*30.44);
+      if(months > EXPIRY_MONTHS) expiredIds.add(n.id);
+    }
+  });
+  const banner = $('#alertBanner');
+  if(expiredIds.size){
+    const names = [...expiredIds].map(id=>{ const n=nodeById(id); return n?n.name:''; }).filter(Boolean).join(', ');
+    $('#alertItems').textContent = names + (expiredIds.size > 3 ? ` (${expiredIds.size} au total)` : '');
+    banner.classList.add('show');
+  } else {
+    banner.classList.remove('show');
+  }
+}
+$('#alertClose').addEventListener('click', ()=>$('#alertBanner').classList.remove('show'));
+
+/* ===== 2. Templates ===== */
+const TEMPLATES = [
+  {id:'tgbt', name:'TGBT', icon:'⚡', domain:'elec', desc:'Tableau général basse tension',
+   circuits:[{num:'Q01',des:'Départ armoire éclairage',type:'coffret',protection:'63A',local:'',statut:'AV',obs:''},
+             {num:'Q02',des:'Départ armoire prises',type:'coffret',protection:'63A',local:'',statut:'AV',obs:''},
+             {num:'Q03',des:'Départ armoire machines',type:'coffret',protection:'100A',local:'',statut:'AV',obs:''},
+             {num:'Q04',des:'Éclairage local TGBT',type:'eclairage',protection:'10A',local:'TGBT',statut:'AV',obs:''}]},
+  {id:'arm-ecl', name:'Armoire éclairage', icon:'☀', domain:'elec', desc:'Éclairage général de local',
+   circuits:[{num:'Q01',des:'Éclairage zone A',type:'eclairage',protection:'10A',local:'',statut:'AV',obs:''},
+             {num:'Q02',des:'Éclairage zone B',type:'eclairage',protection:'10A',local:'',statut:'AV',obs:''},
+             {num:'Q03',des:'Éclairage secours BAES',type:'eclairage',protection:'6A',local:'',statut:'AV',obs:''}]},
+  {id:'arm-prises', name:'Armoire prises', icon:'◧', domain:'elec', desc:'Distribution prises de courant',
+   circuits:[{num:'Q01',des:'Prises 16A nord',type:'prise',protection:'16A',local:'',statut:'AV',obs:''},
+             {num:'Q02',des:'Prises 16A sud',type:'prise',protection:'16A',local:'',statut:'AV',obs:''},
+             {num:'Q03',des:'Prises 32A atelier',type:'prise',protection:'32A',local:'',statut:'AV',obs:''}]},
+  {id:'arm-machines', name:'Armoire machines', icon:'⚙', domain:'elec', desc:'Alimentations machines-outils',
+   circuits:[{num:'Q01',des:'Tour à métaux',type:'machine',protection:'32A tétra',local:'',statut:'AV',obs:''},
+             {num:'Q02',des:'Fraiseuse',type:'machine',protection:'32A tétra',local:'',statut:'AV',obs:''},
+             {num:'Q03',des:'Perceuse à colonne',type:'machine',protection:'16A',local:'',statut:'AV',obs:''},
+             {num:'Q04',des:'Arrêt urgence général',type:'bouton',protection:'',local:'',statut:'AV',obs:''}]},
+  {id:'coffret-baes', name:'Coffret BAES', icon:'🟢', domain:'elec', desc:'Blocs autonomes éclairage sécurité',
+   circuits:[{num:'Q01',des:'BAES couloir',type:'eclairage',protection:'6A',local:'',statut:'AV',obs:''},
+             {num:'Q02',des:'BAES bureaux',type:'eclairage',protection:'6A',local:'',statut:'AV',obs:''},
+             {num:'Q03',des:'Télécommande BAES',type:'bouton',protection:'2A',local:'',statut:'AV',obs:''}]},
+  {id:'nourrice-eau', name:'Nourrice eau', icon:'💧', domain:'plomb', desc:'Collecteur distribution eau',
+   circuits:[{num:'D01',des:'Alimentation sanitaires',type:'robinet',protection:'PER 16',local:'',statut:'AV',obs:''},
+             {num:'D02',des:'Alimentation cuisine',type:'robinet',protection:'PER 16',local:'',statut:'AV',obs:''},
+             {num:'D03',des:'Chauffe-eau',type:'ballon',protection:'PER 20',local:'',statut:'AV',obs:''}]},
+];
+
+let pendingTemplate = null;
+
+function openTemplateModal(){
+  $('#tplGrid').innerHTML = TEMPLATES.map(t=>`
+    <div class="tpl-card" data-tpl="${t.id}">
+      <h4>${t.icon} ${t.name} <span style="font-size:10px;color:${t.domain==='elec'?'var(--elec)':'var(--plomb)'};font-weight:400">${t.domain==='elec'?'⚡ Élec':'💧 Plomb'}</span></h4>
+      <p class="tpl-desc">${t.desc}</p>
+      <div class="tpl-circs">${t.circuits.map(c=>c.des).slice(0,3).join(' · ')}${t.circuits.length>3?' …':''}</div>
+    </div>`).join('');
+  $('#templateModal').classList.add('open');
+}
+$('#btnTemplates').addEventListener('click', openTemplateModal);
+$('#tplClose').addEventListener('click', ()=>$('#templateModal').classList.remove('open'));
+$('#templateModal').addEventListener('click', e=>{
+  const card = e.target.closest('[data-tpl]');
+  if(!card) return;
+  const tpl = TEMPLATES.find(t=>t.id===card.dataset.tpl);
+  if(!tpl) return;
+  $('#templateModal').classList.remove('open');
+  pendingTemplate = tpl;
+  ui.domain = tpl.domain;
+  $$('#domSwitch button').forEach(b=>b.classList.toggle('on',b.dataset.dom===tpl.domain));
+  setTool('cabinet');
+  toast('Cliquez sur le plan pour poser le template « '+tpl.name+' »');
+});
+
+/* ===== 3. Signatures numériques ===== */
+let sigNode = null, sigDrawing = false, sigCtx = null;
+
+function openSigModal(n){
+  sigNode = n;
+  const canvas = $('#sigCanvas');
+  sigCtx = canvas.getContext('2d');
+  sigCtx.clearRect(0,0,canvas.width,canvas.height);
+  sigCtx.strokeStyle='#111'; sigCtx.lineWidth=2; sigCtx.lineCap='round'; sigCtx.lineJoin='round';
+  $('#sigModal').classList.add('open');
+}
+$('#sigCanvas').addEventListener('pointerdown', e=>{
+  sigDrawing=true;
+  const r=e.target.getBoundingClientRect();
+  sigCtx.beginPath(); sigCtx.moveTo(e.clientX-r.left, e.clientY-r.top);
+  e.target.setPointerCapture(e.pointerId);
+});
+$('#sigCanvas').addEventListener('pointermove', e=>{
+  if(!sigDrawing) return;
+  const r=e.target.getBoundingClientRect();
+  sigCtx.lineTo(e.clientX-r.left, e.clientY-r.top); sigCtx.stroke();
+});
+$('#sigCanvas').addEventListener('pointerup', ()=>sigDrawing=false);
+$('#sigClear').onclick = ()=>sigCtx.clearRect(0,0,$('#sigCanvas').width,$('#sigCanvas').height);
+$('#sigCancel').onclick = ()=>$('#sigModal').classList.remove('open');
+$('#sigSave').onclick = ()=>{
+  const dataUrl = $('#sigCanvas').toDataURL('image/png');
+  pushHistory();
+  sigNode.signatures = sigNode.signatures||[];
+  sigNode.signatures.unshift({date:new Date().toISOString().split('T')[0], dataUrl});
+  $('#sigModal').classList.remove('open');
+  renderPanel(); save(); toast('Signature enregistrée');
+};
+function signaturesHTML(n){
+  const sigs = (n.signatures||[]).slice(0,5);
+  if(!sigs.length) return '';
+  return `<div class="p-sec"><h5>Signatures (${sigs.length})</h5>
+    ${sigs.map((s,i)=>`<div class="sig-preview">
+      <img src="${s.dataUrl}" title="Signature du ${s.date}">
+      <div class="sig-meta">${s.date}<br><button class="mini-btn danger" data-delsig="${i}" style="margin-top:4px;font-size:10.5px">Supprimer</button></div>
+    </div>`).join('')}
+  </div>`;
+}
+function bindSigSection(n){
+  $('#pBody').querySelectorAll('[data-delsig]').forEach(btn=>{
+    btn.onclick=()=>{ pushHistory(); n.signatures.splice(+btn.dataset.delsig,1); renderPanel(); save(); };
+  });
+}
+
+/* ===== 4. Comparaison de plans ===== */
+let compareState = null, compareMode = false;
+
+$('#btnCompare').addEventListener('click', ()=>$('#compareModal').classList.add('open'));
+$('#compareCancel').addEventListener('click', ()=>$('#compareModal').classList.remove('open'));
+$('#compareFile').addEventListener('change', e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      compareState=JSON.parse(r.result);
+      $('#compareModal').classList.remove('open');
+      compareMode=true; renderAll(); showCompareOverlay();
+    }catch(err){ toast('Fichier JSON invalide'); }
+  };
+  r.readAsText(f); e.target.value='';
+});
+function showCompareOverlay(){
+  const cur = state.nodes, ref = compareState.nodes;
+  const added   = ref.filter(rn=>!cur.find(cn=>cn.id===rn.id||cn.name===rn.name));
+  const removed  = cur.filter(cn=>!ref.find(rn=>rn.id===cn.id||rn.name===cn.name));
+  const modified = cur.filter(cn=>{ const rn=ref.find(r=>r.id===cn.id); return rn&&rn.status!==cn.status; });
+  $('#diffLegend').innerHTML = `
+    <div class="dl"><span style="background:#3fd68f"></span>${added.length} ajouté(s) dans la référence</div>
+    <div class="dl"><span style="background:#ffb340"></span>${modified.length} statut modifié(s)</div>
+    <div class="dl"><span style="background:#ff5d5d;opacity:.6"></span>${removed.length} supprimé(s) dans la référence</div>`;
+  $('#compareOverlay').classList.add('show');
+  // Apply CSS classes
+  setTimeout(()=>{
+    cur.forEach(cn=>{
+      const el=document.querySelector(`.node[data-id="${cn.id}"]`); if(!el) return;
+      el.classList.remove('node-added','node-modified','node-removed');
+      if(removed.find(r=>r.id===cn.id)) el.classList.add('node-removed');
+      else if(modified.find(m=>m.id===cn.id)) el.classList.add('node-modified');
+    });
+    added.forEach(rn=>{
+      const el=document.querySelector(`.node[data-id="${rn.id}"]`); if(el) el.classList.add('node-added');
+    });
+  },50);
+}
+function stopCompare(){
+  compareMode=false; compareState=null;
+  $('#compareOverlay').classList.remove('show');
+  renderAll();
+}
+$('#compareClose').addEventListener('click', stopCompare);
+$('#compareStop').addEventListener('click', stopCompare);
+$('#compareModal').addEventListener('click', e=>{ if(e.target.id==='compareModal') e.target.classList.remove('open'); });
+
+/* ===== 5. Types personnalisés (couleurs & nouveaux types) ===== */
+let stgDomain = 'elec';
+
+function openSettings(domain){
+  stgDomain = domain||'elec';
+  renderStgList(); $('#settingsModal').classList.add('open');
+}
+function renderStgList(){
+  const eq = effectiveEquips(stgDomain);
+  const customs = (state.customTypes||{})[stgDomain]||{};
+  $('#stgList').innerHTML = Object.entries(eq).map(([k,t])=>`
+    <div class="type-row">
+      <div class="tr-icon" style="background:${t.color}22">${t.icon}</div>
+      <span class="tr-name">${t.label}</span>
+      <div class="tr-color"><input type="color" value="${t.color}" data-ckey="${k}" class="stg-color" title="Changer la couleur"></div>
+      ${customs[k]?`<button class="tr-del" data-ddel="${k}" title="Supprimer ce type">✕</button>`:'<span style="width:22px"></span>'}
+    </div>`).join('');
+  $('#stgList').querySelectorAll('.stg-color').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const k=e.target.dataset.ckey;
+      state.customTypes=state.customTypes||{elec:{},plomb:{}};
+      state.customTypes[stgDomain]=state.customTypes[stgDomain]||{};
+      const base = TYPES[stgDomain]?.equips[k]||customs[k]||{};
+      state.customTypes[stgDomain][k]={...base, color:e.target.value};
+      save(); renderAll();
+    });
+  });
+  $('#stgList').querySelectorAll('[data-ddel]').forEach(btn=>{
+    btn.onclick=()=>{ delete state.customTypes[stgDomain][btn.dataset.ddel]; renderStgList(); save(); renderAll(); renderSubbar(); };
+  });
+}
+$('#btnSettings').addEventListener('click', ()=>openSettings('elec'));
+$('#stgTabElec').addEventListener('click', ()=>{ stgDomain='elec'; renderStgList(); });
+$('#stgTabPlomb').addEventListener('click', ()=>{ stgDomain='plomb'; renderStgList(); });
+$('#stgClose').addEventListener('click', ()=>$('#settingsModal').classList.remove('open'));
+$('#settingsModal').addEventListener('click', e=>{ if(e.target.id==='settingsModal') e.target.classList.remove('open'); });
+$('#stgAdd').addEventListener('click', ()=>{
+  const label=prompt('Nom du type (ex: Chargeur véhicule)'); if(!label) return;
+  const icon=prompt('Icône emoji (ex: 🔌)','⚙️')||'⚙️';
+  const key='custom_'+label.toLowerCase().replace(/[^a-z0-9]/g,'_').slice(0,20)+'_'+Date.now().toString(36);
+  state.customTypes=state.customTypes||{elec:{},plomb:{}};
+  state.customTypes[stgDomain]=state.customTypes[stgDomain]||{};
+  state.customTypes[stgDomain][key]={label,icon,color:'#9aa5b1'};
+  renderStgList(); renderSubbar(); save(); renderAll();
+});
+
+/* ===== 6. QR Code deep-link ===== */
+let _qrInstance=null;
+
+function showQR(n){
+  const url=window.location.origin+window.location.pathname+'?open='+n.id;
+  $('#qrUrl').textContent=url;
+  $('#qrCanvas').innerHTML='';
+  try{
+    _qrInstance=new QRCode($('#qrCanvas'),{text:url,width:200,height:200,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.H});
+  }catch(e){ $('#qrCanvas').textContent='Librairie QR non disponible'; }
+  $('#qrModal').classList.add('open');
+}
+$('#qrClose').addEventListener('click', ()=>$('#qrModal').classList.remove('open'));
+$('#qrModal').addEventListener('click', e=>{ if(e.target.id==='qrModal') e.target.classList.remove('open'); });
+$('#qrDownload').addEventListener('click', ()=>{
+  const img=$('#qrCanvas img')||$('#qrCanvas canvas');
+  if(!img){ toast('QR non généré'); return; }
+  const a=document.createElement('a');
+  a.href=img.tagName==='IMG'?img.src:img.toDataURL();
+  a.download='qr-techniplan.png'; a.click();
+});
+$('#qrPrint').addEventListener('click', ()=>{
+  const img=$('#qrCanvas img')||$('#qrCanvas canvas');
+  if(!img){ toast('QR non généré'); return; }
+  const src=img.tagName==='IMG'?img.src:img.toDataURL();
+  const w=window.open('','_blank');
+  const name=document.title;
+  w.document.write(`<!DOCTYPE html><html><head><style>body{font-family:system-ui;text-align:center;padding:20px}img{width:180px;height:180px}p{font-size:11px;color:#555;word-break:break-all;max-width:220px;margin:8px auto}</style></head><body><img src="${src}"><p>${$('#qrUrl').textContent}</p><script>window.onload=()=>window.print()<\/script></body></html>`);
+  w.document.close();
+});
+
+/* ===== URL params : ouverture directe d'un nœud ===== */
+function handleURLOpen(){
+  const id=new URLSearchParams(location.search).get('open');
+  if(!id) return;
+  const n=nodeById(id); if(!n) return;
+  setTimeout(()=>{ ui.sel=id; openPanel(); panToNode(n); renderAll(); },300);
 }
 
 /* ===== Photos ===== */
@@ -1431,7 +1838,9 @@ function bindScaleSlider(n){
 function bindInputs(obj){
   $('#pBody').querySelectorAll('[data-bind]').forEach(inp=>{
     inp.addEventListener('change', ()=>{ pushHistory(); obj[inp.dataset.bind] = inp.value; renderAll();
-      if(inp.dataset.bind==='name'||inp.dataset.bind==='type') renderPanel(); save(); });
+      if(inp.dataset.bind==='name'||inp.dataset.bind==='type') renderPanel();
+      if(inp.dataset.bind==='dateVerif') checkExpiration();
+      save(); });
     if(inp.tagName==='INPUT'&&inp.type==='text'||inp.tagName==='TEXTAREA')
       inp.addEventListener('input', ()=>{ obj[inp.dataset.bind]=inp.value; save(); });
   });
@@ -1598,8 +2007,11 @@ window.addEventListener('resize', applyTransform);
 
 /* ================= Initialisation ================= */
 state = load();
+if(!state.customTypes) state.customTypes={elec:{},plomb:{}};
 renderAll();
 fitView();
+checkExpiration();
+handleURLOpen();
 if(!localStorage.getItem('techniplan_seen')){
   $('#helpModal').classList.add('open');
   try{ localStorage.setItem('techniplan_seen','1'); }catch(e){}
