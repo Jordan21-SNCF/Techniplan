@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TechniPlan — Plans électricité &amp; plomberie</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/appwrite@16/dist/iife/sdk.js"></script>
 <style>
 :root{
   --bg:#10131a; --bg2:#0c0f15; --panel:#171c26; --panel2:#1d2433;
@@ -236,6 +237,32 @@ table.ctable{border-collapse:collapse;width:100%;min-width:540px;font-size:12px;
   .tool{min-width:50px}
 }
 
+/* ---------- Auth & Cloud ---------- */
+#authBar{display:flex;align-items:center;gap:8px;margin-left:auto}
+#authBar .user-chip{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:99px;background:var(--panel2);border:1px solid var(--line);font-size:12px;color:var(--muted)}
+#authBar .user-chip .dot{width:7px;height:7px;border-radius:50%;background:var(--c)}
+.cloud-btn{padding:5px 11px;border-radius:8px;border:1px solid var(--line);background:var(--bg2);font-size:12px;color:var(--muted);cursor:pointer;transition:.15s}
+.cloud-btn:hover{border-color:var(--accent);color:var(--accent)}
+.cloud-btn.saving{color:var(--av);border-color:var(--av)}
+.cloud-btn.saved{color:var(--c);border-color:var(--c)}
+
+/* ---------- Dashboard multi-plans ---------- */
+#dashboard{position:fixed;inset:0;background:var(--bg);z-index:100;display:none;flex-direction:column}
+#dashboard.open{display:flex}
+#dashboard .db-head{display:flex;align-items:center;gap:14px;padding:14px 20px;background:var(--panel);border-bottom:1px solid var(--line)}
+#dashboard .db-body{flex:1;overflow-y:auto;padding:24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;align-content:start}
+.plan-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;cursor:pointer;transition:.15s;position:relative}
+.plan-card:hover{border-color:var(--accent);background:var(--panel2)}
+.plan-card h3{font-size:14px;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plan-card .pc-meta{font-size:11.5px;color:var(--muted);font-family:var(--mono)}
+.plan-card .pc-stats{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.plan-card .pc-stat{font-size:11px;padding:2px 8px;border-radius:99px;font-family:var(--mono)}
+.plan-card .pc-actions{position:absolute;top:10px;right:10px;display:flex;gap:4px;opacity:0;transition:.15s}
+.plan-card:hover .pc-actions{opacity:1}
+.plan-card-new{border-style:dashed;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:var(--muted);min-height:120px}
+.plan-card-new:hover{color:var(--ink);border-color:var(--accent)}
+.plan-card-new .pn-icon{font-size:28px}
+
 /* ---------- Alerte expiration ---------- */
 #alertBanner{background:rgba(255,179,64,.1);border-bottom:2px solid var(--av);padding:7px 16px;display:none;align-items:center;gap:10px;font-size:12.5px;z-index:28;flex-wrap:wrap}
 #alertBanner.show{display:flex}
@@ -328,6 +355,13 @@ table.ctable{border-collapse:collapse;width:100%;min-width:540px;font-size:12px;
     <button class="layer-chip on" data-layer="secu"><span class="dot"></span>🟢 Sécurité</button>
   </div>
   <div class="stats" id="stats"></div>
+  <div id="authBar">
+    <span id="userChip" class="user-chip" style="display:none"><span class="dot"></span><span id="userEmail"></span></span>
+    <button class="cloud-btn" id="btnCloudSave" title="Sauvegarder dans le cloud" style="display:none">☁ Sauvegarder</button>
+    <button class="cloud-btn" id="btnDashboard" title="Mes plans" style="display:none">📂 Mes plans</button>
+    <button class="cloud-btn" id="btnShare" title="Partager en lecture seule" style="display:none">🔗 Partager</button>
+    <button class="cloud-btn" id="btnLogin">🔑 Connexion</button>
+  </div>
   <div class="hbtns">
     <button class="hbtn" id="btnTemplates" title="Templates d'armoires préconfigurées">📋 Templates</button>
     <button class="hbtn" id="btnCompare" title="Comparer deux plans">⇄ Comparer</button>
@@ -454,6 +488,34 @@ table.ctable{border-collapse:collapse;width:100%;min-width:540px;font-size:12px;
 
 <div id="toast"></div>
 <div id="report"></div>
+
+<!-- Dashboard multi-plans -->
+<div id="dashboard">
+  <div class="db-head">
+    <div class="brand"><div class="logo">⚡</div><div>TechniPlan<small>Mes plans</small></div></div>
+    <button class="hbtn" id="dbClose" style="margin-left:auto">✕ Fermer</button>
+    <button class="hbtn" id="dbLogout">Déconnexion</button>
+  </div>
+  <div class="db-body" id="dbGrid"></div>
+</div>
+
+<!-- Auth (login / register) -->
+<div class="modal-bg" id="authModal">
+  <div class="modal" style="max-width:400px">
+    <h2 id="authTitle">🔑 Connexion</h2>
+    <div class="field"><label>Email</label><input type="email" id="authEmail" placeholder="vous@exemple.fr" autocomplete="email"></div>
+    <div class="field" style="margin-top:10px"><label>Mot de passe</label><input type="password" id="authPwd" placeholder="••••••••" autocomplete="current-password"></div>
+    <div id="authNameField" class="field" style="margin-top:10px;display:none"><label>Nom affiché</label><input type="text" id="authName" placeholder="Prénom Nom"></div>
+    <p id="authError" style="color:var(--nc);font-size:12.5px;margin-top:8px;display:none"></p>
+    <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;align-items:center">
+      <button class="mini-btn" id="authToggle">Créer un compte</button>
+      <div style="display:flex;gap:8px">
+        <button class="hbtn" id="authCancel">Annuler</button>
+        <button class="hbtn primary" id="authSubmit">Se connecter</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- Signature numérique -->
 <div class="modal-bg" id="sigModal">
@@ -1972,6 +2034,285 @@ document.addEventListener('keydown', e=>{
     else { pushHistory(); state.walls=state.walls.filter(w=>w.id!==ui.sel); state.texts=state.texts.filter(t=>t.id!==ui.sel); ui.sel=null; closePanel(); renderAll(); save(); }
   }
 });
+/* ================================================================
+   APPWRITE — Phase 2
+   ================================================================ */
+(()=>{
+  const AW_ENDPOINT = 'https://srv.localyprint.fr/v1';
+  const AW_PROJECT  = '6a32fcd10013ffbb1621';
+  const AW_DB       = 'techniplan';
+  const AW_COL      = 'plans';
+  const AW_BUCKET   = 'plan-data';
+
+  if(typeof Appwrite === 'undefined'){ console.warn('Appwrite SDK non chargé'); return; }
+
+  const client = new Appwrite.Client()
+    .setEndpoint(AW_ENDPOINT).setProject(AW_PROJECT);
+  const account  = new Appwrite.Account(client);
+  const databases = new Appwrite.Databases(client);
+  const storage  = new Appwrite.Storage(client);
+
+  let currentUser = null;
+  let currentPlanId = null; // ID du document plan dans Appwrite
+
+  /* --- UI helpers --- */
+  function setLoggedIn(user){
+    currentUser = user;
+    $('#userEmail').textContent = user.email;
+    $('#userChip').style.display='flex';
+    $('#btnCloudSave').style.display='';
+    $('#btnDashboard').style.display='';
+    $('#btnShare').style.display='';
+    $('#btnLogin').style.display='none';
+  }
+  function setLoggedOut(){
+    currentUser=null; currentPlanId=null;
+    $('#userChip').style.display='none';
+    $('#btnCloudSave').style.display='none';
+    $('#btnDashboard').style.display='none';
+    $('#btnShare').style.display='none';
+    $('#btnLogin').style.display='';
+  }
+
+  /* --- Auth check on load --- */
+  account.get().then(setLoggedIn).catch(()=>setLoggedOut());
+
+  /* --- Login / Register modal --- */
+  let authMode = 'login';
+  $('#btnLogin').addEventListener('click', ()=>{
+    authMode='login'; $('#authTitle').textContent='🔑 Connexion';
+    $('#authSubmit').textContent='Se connecter'; $('#authToggle').textContent='Créer un compte';
+    $('#authNameField').style.display='none'; $('#authError').style.display='none';
+    $('#authEmail').value=''; $('#authPwd').value='';
+    $('#authModal').classList.add('open');
+  });
+  $('#authCancel').addEventListener('click', ()=>$('#authModal').classList.remove('open'));
+  $('#authModal').addEventListener('click', e=>{ if(e.target.id==='authModal') e.target.classList.remove('open'); });
+  $('#authToggle').addEventListener('click', ()=>{
+    authMode = authMode==='login'?'register':'login';
+    $('#authTitle').textContent = authMode==='login'?'🔑 Connexion':'📝 Créer un compte';
+    $('#authSubmit').textContent = authMode==='login'?'Se connecter':'Créer le compte';
+    $('#authToggle').textContent = authMode==='login'?'Créer un compte':'Déjà un compte ?';
+    $('#authNameField').style.display = authMode==='register'?'':'none';
+    $('#authError').style.display='none';
+  });
+  $('#authSubmit').addEventListener('click', async ()=>{
+    const email=$('#authEmail').value.trim(), pwd=$('#authPwd').value;
+    if(!email||!pwd){ showAuthError('Email et mot de passe requis'); return; }
+    $('#authSubmit').textContent='…'; $('#authSubmit').disabled=true;
+    try{
+      if(authMode==='register'){
+        const name=$('#authName').value.trim()||email.split('@')[0];
+        await account.create(Appwrite.ID.unique(), email, pwd, name);
+      }
+      await account.createEmailPasswordSession(email, pwd);
+      const user = await account.get();
+      setLoggedIn(user);
+      $('#authModal').classList.remove('open');
+      toast('Connecté : '+user.email);
+    }catch(err){
+      showAuthError(err.message||'Erreur de connexion');
+    }finally{
+      $('#authSubmit').textContent = authMode==='login'?'Se connecter':'Créer le compte';
+      $('#authSubmit').disabled=false;
+    }
+  });
+  function showAuthError(msg){ $('#authError').textContent=msg; $('#authError').style.display='block'; }
+
+  /* --- Déconnexion --- */
+  $('#dbLogout').addEventListener('click', async ()=>{
+    await account.deleteSession('current').catch(()=>{});
+    setLoggedOut(); $('#dashboard').classList.remove('open');
+    toast('Déconnecté');
+  });
+
+  /* --- Sauvegarde cloud --- */
+  async function cloudSave(){
+    if(!currentUser){ toast('Connectez-vous d\'abord'); return; }
+    const btn=$('#btnCloudSave');
+    btn.textContent='⏳ Sauvegarde…'; btn.classList.add('saving');
+    try{
+      const json = JSON.stringify(state);
+      const blob = new Blob([json],{type:'application/json'});
+      const file = new File([blob], (state.name||'plan').replace(/[^\w\-]/g,'_')+'.json',{type:'application/json'});
+
+      if(currentPlanId){
+        // Mettre à jour le fichier existant
+        const fileId = 'plan_'+currentPlanId;
+        try{ await storage.deleteFile(AW_BUCKET, fileId); }catch(e){}
+        await storage.createFile(AW_BUCKET, fileId, file, [
+          Appwrite.Permission.read(Appwrite.Role.user(currentUser.$id)),
+          Appwrite.Permission.write(Appwrite.Role.user(currentUser.$id))
+        ]);
+        // Mettre à jour le document metadata
+        const summary = buildSummary();
+        await databases.updateDocument(AW_DB, AW_COL, currentPlanId, {name:state.name, summary});
+      } else {
+        // Nouveau plan
+        const docId = Appwrite.ID.unique();
+        const fileId = 'plan_'+docId;
+        await storage.createFile(AW_BUCKET, fileId, file, [
+          Appwrite.Permission.read(Appwrite.Role.user(currentUser.$id)),
+          Appwrite.Permission.write(Appwrite.Role.user(currentUser.$id))
+        ]);
+        const summary = buildSummary();
+        await databases.createDocument(AW_DB, AW_COL, docId,
+          {name:state.name, userId:currentUser.$id, summary},
+          [
+            Appwrite.Permission.read(Appwrite.Role.user(currentUser.$id)),
+            Appwrite.Permission.write(Appwrite.Role.user(currentUser.$id)),
+            Appwrite.Permission.delete(Appwrite.Role.user(currentUser.$id))
+          ]
+        );
+        currentPlanId = docId;
+      }
+      btn.textContent='✓ Sauvegardé'; btn.classList.remove('saving'); btn.classList.add('saved');
+      setTimeout(()=>{ btn.textContent='☁ Sauvegarder'; btn.classList.remove('saved'); },2500);
+      toast('Plan sauvegardé dans le cloud');
+    }catch(err){
+      btn.textContent='☁ Sauvegarder'; btn.classList.remove('saving');
+      toast('Erreur sauvegarde : '+err.message);
+      console.error(err);
+    }
+  }
+  function buildSummary(){
+    const cabs=state.nodes.filter(n=>n.kind==='cabinet');
+    const nc=cabs.filter(c=>c.status==='NC').length;
+    const av=cabs.filter(c=>c.status==='AV').length;
+    return JSON.stringify({cabs:cabs.length, nc, av, nodes:state.nodes.length});
+  }
+  $('#btnCloudSave').addEventListener('click', cloudSave);
+
+  /* --- Dashboard --- */
+  async function openDashboard(){
+    if(!currentUser){ toast('Connectez-vous d\'abord'); return; }
+    $('#dashboard').classList.add('open');
+    $('#dbGrid').innerHTML='<p style="color:var(--muted);font-size:13px">Chargement…</p>';
+    try{
+      const res = await databases.listDocuments(AW_DB, AW_COL, [
+        Appwrite.Query.equal('userId',[currentUser.$id]),
+        Appwrite.Query.orderDesc('$updatedAt'),
+        Appwrite.Query.limit(50)
+      ]);
+      renderDashboard(res.documents);
+    }catch(err){ $('#dbGrid').innerHTML=`<p style="color:var(--nc)">Erreur : ${err.message}</p>`; }
+  }
+  function renderDashboard(docs){
+    let html = `<div class="plan-card plan-card-new" id="dbNewPlan"><div class="pn-icon">✚</div><span>Nouveau plan vide</span></div>`;
+    html += docs.map(doc=>{
+      let sm={};
+      try{ sm=JSON.parse(doc.summary||'{}'); }catch(e){}
+      const updated=new Date(doc.$updatedAt).toLocaleDateString('fr-FR');
+      return `<div class="plan-card" data-docid="${doc.$id}">
+        <h3>${esc(doc.name||'Sans titre')}</h3>
+        <div class="pc-meta">Mis à jour le ${updated}</div>
+        <div class="pc-stats">
+          ${sm.cabs!==undefined?`<span class="pc-stat" style="background:var(--panel2)">⚡ ${sm.cabs} armoire(s)</span>`:''}
+          ${sm.nc?`<span class="pc-stat" style="background:rgba(255,93,93,.18);color:var(--nc)">${sm.nc} NC</span>`:''}
+          ${sm.av?`<span class="pc-stat" style="background:rgba(255,179,64,.16);color:var(--av)">${sm.av} AV</span>`:''}
+        </div>
+        <div class="pc-actions">
+          <button class="mini-btn danger" data-del="${doc.$id}" title="Supprimer">🗑</button>
+        </div>
+      </div>`;
+    }).join('');
+    $('#dbGrid').innerHTML = html;
+
+    $('#dbNewPlan').addEventListener('click', ()=>{
+      pushHistory(); state=blankState(); currentPlanId=null;
+      ui.sel=null; closePanel(); renderAll(); fitView();
+      $('#dashboard').classList.remove('open'); save();
+    });
+    $('#dbGrid').querySelectorAll('[data-docid]').forEach(card=>{
+      card.addEventListener('click', async e=>{
+        if(e.target.closest('[data-del]')) return;
+        await loadCloudPlan(card.dataset.docid);
+        $('#dashboard').classList.remove('open');
+      });
+    });
+    $('#dbGrid').querySelectorAll('[data-del]').forEach(btn=>{
+      btn.addEventListener('click', async e=>{
+        e.stopPropagation();
+        if(!confirm('Supprimer ce plan ? Cette action est irréversible.')) return;
+        try{
+          const fileId='plan_'+btn.dataset.del;
+          await storage.deleteFile(AW_BUCKET, fileId).catch(()=>{});
+          await databases.deleteDocument(AW_DB, AW_COL, btn.dataset.del);
+          btn.closest('.plan-card').remove();
+          toast('Plan supprimé');
+        }catch(err){ toast('Erreur : '+err.message); }
+      });
+    });
+  }
+  async function loadCloudPlan(docId){
+    try{
+      const fileId='plan_'+docId;
+      const url=`${AW_ENDPOINT}/storage/buckets/${AW_BUCKET}/files/${fileId}/download?project=${AW_PROJECT}`;
+      const headers={'X-Appwrite-Project':AW_PROJECT};
+      // Utiliser les cookies de session (pas de clé API côté client)
+      const resp = await fetch(url, {credentials:'include'});
+      if(!resp.ok) throw new Error('Fichier inaccessible ('+resp.status+')');
+      const data = await resp.json();
+      pushHistory(); state=data; currentPlanId=docId;
+      if(!state.customTypes) state.customTypes={elec:{},plomb:{}};
+      ui.sel=null; closePanel(); renderAll(); fitView(); save();
+      checkExpiration();
+      toast('Plan chargé : '+state.name);
+    }catch(err){ toast('Erreur chargement : '+err.message); console.error(err); }
+  }
+  $('#btnDashboard').addEventListener('click', openDashboard);
+  $('#dbClose').addEventListener('click', ()=>$('#dashboard').classList.remove('open'));
+
+  /* --- Partage en lecture seule --- */
+  async function shareCurrentPlan(){
+    if(!currentUser){ toast('Connectez-vous d\'abord'); return; }
+    if(!currentPlanId){ await cloudSave(); if(!currentPlanId) return; }
+    try{
+      // Générer un token unique
+      const token = Array.from(crypto.getRandomValues(new Uint8Array(24))).map(b=>b.toString(16).padStart(2,'0')).join('');
+      await databases.updateDocument(AW_DB, AW_COL, currentPlanId, {shareToken:token});
+      // Ajouter permission lecture publique au fichier
+      const fileId='plan_'+currentPlanId;
+      await storage.updateFile(AW_BUCKET, fileId, undefined, [
+        Appwrite.Permission.read(Appwrite.Role.any()),
+        Appwrite.Permission.read(Appwrite.Role.user(currentUser.$id)),
+        Appwrite.Permission.write(Appwrite.Role.user(currentUser.$id))
+      ]);
+      const shareUrl = window.location.origin+window.location.pathname+'?share='+token;
+      await navigator.clipboard.writeText(shareUrl).catch(()=>{});
+      prompt('Lien de partage (copié dans le presse-papier) :', shareUrl);
+      toast('Lien copié !');
+    }catch(err){ toast('Erreur partage : '+err.message); console.error(err); }
+  }
+  $('#btnShare').addEventListener('click', shareCurrentPlan);
+
+  /* --- Chargement via lien de partage --- */
+  async function handleShareLink(){
+    const token = new URLSearchParams(location.search).get('share');
+    if(!token) return;
+    try{
+      const res = await databases.listDocuments(AW_DB, AW_COL, [
+        Appwrite.Query.equal('shareToken',[token]), Appwrite.Query.limit(1)
+      ]);
+      if(!res.documents.length){ toast('Lien de partage invalide'); return; }
+      const doc = res.documents[0];
+      const fileId='plan_'+doc.$id;
+      const url=`${AW_ENDPOINT}/storage/buckets/${AW_BUCKET}/files/${fileId}/download?project=${AW_PROJECT}`;
+      const resp = await fetch(url);
+      if(!resp.ok) throw new Error('Fichier inaccessible');
+      const data = await resp.json();
+      state=data; if(!state.customTypes) state.customTypes={elec:{},plomb:{}};
+      // Mode lecture seule
+      state._readOnly=true;
+      ui.sel=null; closePanel(); renderAll(); fitView(); checkExpiration();
+      toast('Plan partagé : '+state.name+' (lecture seule)');
+      // Bloquer les modifications
+      document.title='[Lecture seule] '+state.name+' — TechniPlan';
+    }catch(err){ toast('Erreur lien partage : '+err.message); }
+  }
+  setTimeout(handleShareLink, 600);
+})();
+
 /* ===== Redimensionnement du panneau latéral ===== */
 (()=>{
   const handle = $('#panel-resize');
