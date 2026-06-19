@@ -1731,13 +1731,23 @@ $('#stgAdd').addEventListener('click', ()=>{
 /* ===== 6. QR Code deep-link ===== */
 let _qrInstance=null;
 
-function showQR(n){
-  const url=window.location.origin+window.location.pathname+'?open='+n.id;
+async function showQR(n){
+  const planId = window._aw?.planId;
+  let url = window.location.origin+window.location.pathname+'?open='+n.id;
+  if(planId){
+    url += '&planId='+planId;
+    // Rendre le fichier plan public pour accès sans authentification
+    window._aw.makeFilePublic('plan_'+planId).catch(()=>{});
+  }
   $('#qrUrl').textContent=url;
   $('#qrCanvas').innerHTML='';
   try{
     _qrInstance=new QRCode($('#qrCanvas'),{text:url,width:200,height:200,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.H});
   }catch(e){ $('#qrCanvas').textContent='Librairie QR non disponible'; }
+  if(!planId){
+    $('#qrModal').querySelector('.qr-url').insertAdjacentHTML('afterend',
+      '<p style="color:var(--av);font-size:11.5px;text-align:center;margin-top:6px">⚠ Sauvegardez le plan dans le cloud (☁) pour que ce QR fonctionne sur d\'autres appareils.</p>');
+  }
   $('#qrModal').classList.add('open');
 }
 $('#qrClose').addEventListener('click', ()=>$('#qrModal').classList.remove('open'));
@@ -1907,13 +1917,60 @@ function renderElemPage(n){
 }
 
 /* ===== URL params : ouverture directe d'un nœud ===== */
-function handleURLOpen(){
-  const id=new URLSearchParams(location.search).get('open');
+async function handleURLOpen(){
+  const params = new URLSearchParams(location.search);
+  const id     = params.get('open');
+  const planId = params.get('planId');
   if(!id) return;
-  setTimeout(()=>{
-    const n=nodeById(id);
-    if(n){ openElemPage(n); }
-  },400);
+
+  // Montrer la page immédiatement avec un état de chargement
+  $('#elemPage').classList.add('open');
+  $('#epTitle').textContent='Chargement…';
+  $('#epSub').textContent='';
+  $('#epStatusChip').textContent='';
+  $('#epBody').innerHTML='<p style="color:var(--muted);padding:20px;text-align:center">Recherche de l\'élément…</p>';
+
+  // 1. Essai local
+  let n = nodeById(id);
+  if(n){ renderElemPage(n); return; }
+
+  // 2. Chargement depuis Appwrite si planId fourni
+  if(planId && window._aw){
+    $('#epBody').innerHTML='<p style="color:var(--muted);padding:20px;text-align:center">⏳ Chargement du plan depuis le cloud…</p>';
+    try{
+      const fileId  = 'plan_'+planId;
+      const fileUrl = window._aw.endpoint+'/storage/buckets/'+window._aw.bucket+'/files/'+fileId+'/download?project='+window._aw.project;
+      const resp    = await fetch(fileUrl);
+      if(!resp.ok) throw new Error('Fichier inaccessible ('+resp.status+')');
+      const data    = await resp.json();
+      // Charger le plan en mémoire sans écraser le localStorage
+      const savedState = state;
+      state = data;
+      if(!state.customTypes) state.customTypes={elec:{},plomb:{}};
+      n = nodeById(id);
+      if(n){
+        renderElemPage(n);
+        return;
+      }
+      // Pas trouvé dans ce plan non plus : restaurer
+      state = savedState;
+    }catch(err){
+      console.warn('Chargement cloud échoué:', err);
+    }
+  }
+
+  // 3. Élément introuvable → message clair
+  $('#epTitle').textContent='Élément introuvable';
+  $('#epSub').textContent='';
+  $('#epBody').innerHTML=`
+    <div style="padding:24px;text-align:center;color:var(--muted)">
+      <div style="font-size:40px;margin-bottom:12px">🔍</div>
+      <p style="margin-bottom:8px">Cet élément n'est pas disponible sur cet appareil.</p>
+      ${planId
+        ? '<p style="font-size:12.5px">Le fichier cloud est introuvable ou n\'est pas accessible publiquement.</p>'
+        : '<p style="font-size:12.5px">Sauvegardez le plan dans le cloud (bouton ☁) depuis l\'appareil source, puis regenerez le QR.</p>'
+      }
+    </div>`;
 }
 
 /* ===== Photos ===== */
@@ -2286,6 +2343,26 @@ document.addEventListener('keydown', e=>{
 
   let currentUser = null;
   let currentPlanId = null; // ID du document plan dans Appwrite
+
+  // Expose globalement pour showQR et handleURLOpen
+  window._aw = {
+    get planId(){ return currentPlanId; },
+    get endpoint(){ return AW_ENDPOINT; },
+    get project(){ return AW_PROJECT; },
+    get bucket(){ return AW_BUCKET; },
+    get db(){ return AW_DB; },
+    get col(){ return AW_COL; },
+    storage, databases,
+    makeFilePublic: async(fileId)=>{
+      try{
+        await storage.updateFile(AW_BUCKET, fileId, undefined, [
+          Appwrite.Permission.read(Appwrite.Role.any()),
+          Appwrite.Permission.read(Appwrite.Role.user(currentUser?.$id||'x')),
+          Appwrite.Permission.write(Appwrite.Role.user(currentUser?.$id||'x'))
+        ]);
+      }catch(e){ /* silencieux si pas de droits */ }
+    }
+  };
 
   /* --- UI helpers --- */
   function setLoggedIn(user){
